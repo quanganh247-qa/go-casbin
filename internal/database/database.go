@@ -9,8 +9,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/casbin/casbin/v2"
+	"github.com/casbin/casbin/v2/model"
+	xormadapter "github.com/casbin/xorm-adapter/v3"
 	_ "github.com/joho/godotenv/autoload"
 	_ "github.com/mattn/go-sqlite3"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // Service represents a service that interacts with a database.
@@ -110,4 +115,32 @@ func (s *service) Health() map[string]string {
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", dburl)
 	return s.db.Close()
+}
+
+func SetupCasbin() (*casbin.Enforcer, *gorm.DB, error) {
+
+	// Connect to SQLite DB using GORM
+	db, err := gorm.Open(sqlite.Open(dburl), &gorm.Config{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect database: %w", err)
+	}
+
+	// SQLite file: casbin.db
+	adapter, err := xormadapter.NewAdapter("sqlite3", dburl, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	m, err := model.NewModelFromFile("config/rbac_model.conf")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	enforcer, err := casbin.NewEnforcer(m, adapter)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	_ = enforcer.LoadPolicy()
+	return enforcer, db, nil
 }

@@ -58,3 +58,31 @@ func Authorize(e *casbin.Enforcer) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func CasbinMiddleware(enforcer *casbin.Enforcer) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		username, exists := c.Get("username")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Missing user context"})
+			c.Abort()
+			return
+		}
+
+		obj := c.Request.URL.Path // resource (e.g. /admin)
+		act := c.Request.Method   // action (e.g. GET, POST)
+
+		ok, err := enforcer.Enforce(username, obj, act)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Authorization error"})
+			c.Abort()
+			return
+		}
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
