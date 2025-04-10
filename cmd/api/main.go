@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"my-casbin/internal/middleware"
 	"my-casbin/internal/server"
 )
 
@@ -40,13 +41,20 @@ func main() {
 
 	server := server.NewServer()
 
+	token, err := middleware.GenerateToken("alice") // try "bob" too
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("JWT Token:", token)
+
 	// Create a done channel to signal when the shutdown is complete
 	done := make(chan bool, 1)
 
 	// Run graceful shutdown in a separate goroutine
 	go gracefulShutdown(server, done)
 
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		panic(fmt.Sprintf("http server error: %s", err))
 	}

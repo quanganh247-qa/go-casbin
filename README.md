@@ -37,3 +37,26 @@ Clean up binary from the last build:
 ```bash
 make clean
 ```
+
+
+```
+my-casbin
+├─ .air.toml
+├─ .goreleaser.yml
+├─ Makefile
+├─ README.md
+├─ cmd
+│  └─ api
+│     ├─  rbac_model.conf
+│     └─ policy.csv
+├─ go.mod
+├─ go.sum
+└─ internal
+   ├─ database
+   │  └─ database.go
+   └─ server
+      ├─ routes.go
+      ├─ routes_test.go
+      └─ server.go
+
+```

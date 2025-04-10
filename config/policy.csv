@@ -1,0 +1,4 @@
+p, admin, /admin, GET
+p, user, /user, GET
+g, alice, admin
+g, bob, user

@@ -1,8 +1,12 @@
 package server
 
 import (
+	"my-casbin/internal/middleware"
 	"net/http"
 
+	"github.com/casbin/casbin/v2"
+	"github.com/casbin/casbin/v2/model"
+	fileadapter "github.com/casbin/casbin/v2/persist/file-adapter"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +24,21 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.GET("/", s.HelloWorldHandler)
 
 	r.GET("/health", s.healthHandler)
+
+	r.Use(middleware.JWTMiddleware())
+
+	m, _ := model.NewModelFromFile("config/rbac_model.conf")
+	a := fileadapter.NewAdapter("config/policy.csv")
+	e, _ := casbin.NewEnforcer(m, a)
+	e.LoadPolicy()
+
+	r.GET("/admin", middleware.Authorize(e), func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Hello Admin!"})
+	})
+
+	r.GET("/user", middleware.Authorize(e), func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Hello User!"})
+	})
 
 	return r
 }
