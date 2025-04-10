@@ -2,48 +2,38 @@
 
 This guide walks you through the main steps of setting up a Gin web application with GORM for data persistence using SQLite and Casbin for role-based access control (RBAC).
 
----
-
 ## 1. Prerequisites
 
-- Go installed (as defined in the go.mod file, at least 1.23.4).
-- A Mac machine with a terminal (or use your IDE’s integrated terminal).
-- Basic understanding of Gin, GORM, and Casbin.
-
----
+- Go installed (version 1.23.4 or higher)
+- A Mac machine with a terminal
+- Basic understanding of Gin, GORM, and Casbin
 
 ## 2. Project Structure
 
-Your repository is structured approximately as follows:
-
 ```
-my-casbin
-├─ cmd/api
-│  ├─ rbac_model.conf         // Casbin RBAC model configuration
-│  └─ policy.csv              // Casbin policy file (if using file-based policies)
-├─ internal
-│  ├─ database
-│  │  └─ database.go          // Database/GORM & Casbin initialization
-│  └─ handler                 // HTTP request handlers (e.g., RegisterUser)
+my-casbin/
+├─ cmd/api/
+│  ├─ rbac_model.conf    # Casbin RBAC model configuration
+│  └─ policy.csv         # Casbin policy file
+├─ internal/
+│  ├─ database/
+│  │  └─ database.go     # Database/GORM & Casbin initialization
+│  └─ handler/           # HTTP request handlers
 │     └─ handler.go
 ├─ go.mod
 ├─ Makefile
 └─ README.md
 ```
 
----
-
 ## 3. Configuring GORM with SQLite
 
-In your `/internal/database/database.go` file, the `SetupCasbin()` function demonstrates how to:
+The `SetupCasbin()` function in `/internal/database/database.go` handles:
 
-- Open an SQLite database connection using GORM.
-- Create a Casbin adapter based on the same SQLite file.
+- SQLite database connection using GORM
+- Casbin adapter configuration
+- RBAC model loading
 
-Example snippet:
-    
-````go
-// filepath: [database.go](http://_vscodecontentref_/0)
+```go
 func SetupCasbin() (*casbin.Enforcer, *gorm.DB, error) {
     // Connect to SQLite DB using GORM
     db, err := gorm.Open(sqlite.Open(dburl), &gorm.Config{})
@@ -51,13 +41,13 @@ func SetupCasbin() (*casbin.Enforcer, *gorm.DB, error) {
         return nil, nil, fmt.Errorf("failed to connect database: %w", err)
     }
 
-    // Use xorm adapter for Casbin; Note: adjust the database url and options as needed
+    // Initialize Casbin with xorm adapter
     adapter, err := xormadapter.NewAdapter("sqlite3", dburl, true)
     if err != nil {
         return nil, nil, err
     }
 
-    // Load the Casbin model (RBAC model definition)
+    // Load RBAC model
     m, err := model.NewModelFromFile("config/rbac_model.conf")
     if err != nil {
         return nil, nil, err
@@ -68,7 +58,71 @@ func SetupCasbin() (*casbin.Enforcer, *gorm.DB, error) {
         return nil, nil, err
     }
 
-    // Load all current policies from persistent storage
-    _ = enforcer.LoadPolicy()
+    enforcer.LoadPolicy()
     return enforcer, db, nil
 }
+```
+
+## 4. Setting up Casbin for RBAC
+
+The system uses Casbin for role-based access control:
+
+1. Model definition in `rbac_model.conf`
+2. Policy management through the adapter
+3. Role assignment in handlers
+
+Example user registration handler:
+
+```go
+func RegisterUser(db *gorm.DB, enforcer *casbin.Enforcer) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // Create user
+        user := User{
+            Username: req.Username,
+            Password: req.Password, // TODO: Add password hashing
+            Role:     "user",
+        }
+        if err := db.Create(&user).Error; err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+            return
+        }
+
+        // Assign role
+        if _, err := enforcer.AddGroupingPolicy(user.Username, "user"); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign role"})
+            return
+        }
+
+        // Grant permissions
+        if _, err := enforcer.AddPolicy(user.Username, "/profile", "GET"); err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign policy"})
+            return
+        }
+
+        c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
+    }
+}
+```
+
+## 5. Integrating with Gin
+
+Server initialization and route configuration:
+
+```go
+func StartServer() {
+    // Initialize Casbin and database
+    enforcer, db, err := database.SetupCasbin()
+    if err != nil {
+        log.Fatalf("Error initializing Casbin and DB: %v", err)
+    }
+
+    // Configure Gin router
+    r := gin.Default()
+    
+    // Register routes
+    r.POST("/register", handler.RegisterUser(db, enforcer))
+
+    // Start server
+    r.Run(":8080")
+}
+```
